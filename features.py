@@ -40,18 +40,33 @@ def get_between(df0, target, merge_way, s, e, duration=None):
     #df_avg[etime] = df_avg[etime].apply(lambda s: datetime.strftime(s, dformat))
     return df_avg[target].iat[0]
 
+
+def get_point(df0, target, t, default_value=0):
+    df = df0.copy()
+    df[stime] = pd.to_datetime(df[stime])
+    df[etime] = pd.to_datetime(df[etime])
+    df1 = df[(df[etime] >= t) & (df[stime] <= t)]
+    if len(df1) == 0:
+        return default_value
+    else:
+        return df1[target].iat[0]
+
+def get_mode(df0, target, t, default_value=0):
+    d = {1: [1, 0, 0, 0], 2: [0, 1, 0, 0], 4: [0, 0, 1, 0], 5: [0, 0, 0, 1]}
+    return d[int(get_point(df0, target, t, default_value))]
+
 if __name__ == '__main__':
-    df = pd.read_csv('./data/db_brightness_detail.csv')
-    df_user = df[df['enSN'] == 'ELS000040'].reset_index(drop=True)
-    target, duration = 'brightness', 'duration'
-    #plot(df_user, target)
-    #df_user.to_csv('ELS000040_brightness.csv', index=False, encoding='utf-8-sig')
-    s = datetime(2020, 5, 17, 9, 36, 19)
-    e = datetime(2020, 5, 17, 9, 38, 20)
-    df_user_norm = get_between(df_user, target, 'sum', s, e, duration)
-    #plot(df_user_norm, target)
-    #df_user_norm.to_csv('ELS000040_brightness_norm.csv', index=False, encoding='utf-8-sig')
-    #df_user_norm_sum = normalize(df_user, target, 'sum')
-    #plot(df_user_norm_sum, target)
+    # df = pd.read_csv('./data/db_brightness_detail.csv')
+    # df_user = df[df['enSN'] == 'ELS000040'].reset_index(drop=True)
+    # target, duration = 'brightness', 'duration'
+    # s = datetime(2020, 5, 17, 9, 36, 19)
+    # e = datetime(2020, 5, 17, 9, 38, 20)
+    # df_user_norm = get_between(df_user, target, 'sum', s, e, duration)
+
+    df1 = pd.read_csv('./data/db_ambient_light_detail.csv')
+    df_user1 = df1[df1['enSN'] == 'ELS000040'].reset_index(drop=True)
+    target = 'level'
+    t = datetime(2020, 5, 17, 11, 26, 32)
+    point = get_point(df_user1, target, t)
     
     
