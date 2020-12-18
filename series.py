@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import os
-from features import get_between, get_point, get_mode
+from features import get_between, get_point, get_mode, get_bright_session_num, get_apps_between_with_duration
 
 stime, etime = 'formatted_start_time', 'formatted_end_time'
 ltime = 'last_bright_start_time'
@@ -13,6 +13,10 @@ def load_user_brit(enSN):
 def load(filename, enSN):
     df = pd.read_csv(os.path.join('./data', filename))
     return df[df['enSN'] == enSN].reset_index(drop=True).copy()
+
+def load_app_class(enSN, typ):
+    df = pd.read_csv('./data/gpu_detail_type(1)(1).csv')
+    return df['name'][(df['enSN'] == enSN) & (df['type'] == typ)].unique()
 
 def build_dark_session(enSN):
     df = load_user_brit(enSN)
@@ -64,7 +68,7 @@ def build_series(enSN, dt=pd.Timedelta(seconds=10)):
     # df_light = load('db_ambient_light_detail.csv', enSN)
     df_power_saving = load('db_power_saving.csv', enSN)
     df_battery = load('db_battery_detail.csv', enSN)
-    # df_disp = load('db_app_display_detail.csv', enSN)
+    df_disp = load('db_app_display_detail.csv', enSN)
     # df_tp = load('db_app_tp_detail.csv', enSN)
     # df_bt = load('db_app_bt_detail.csv', enSN)
     # df_camera = load('db_app_camera_detail.csv', enSN)
@@ -73,11 +77,17 @@ def build_series(enSN, dt=pd.Timedelta(seconds=10)):
     # df_gpu = load('db_app_gpu_detail.csv', enSN)
     # df_sensor = load('db_app_sensor_detail.csv', enSN)
     series_dict = {}
+    apps_work = load_app_class(enSN, '工作')
+    apps_game = load_app_class(enSN, '游戏')
+    apps_social = load_app_class(enSN, '社交')
     for i, row in df_sess.iterrows():
         series_dict[i] = pd.DataFrame()
         curr = row[stime]
         while curr <= row[etime]:
             mode = get_mode(df_power_saving, 'mode', curr)
+            w_e, w_d = get_apps_between_with_duration(df_disp, 'energy', 'sum', row[ltime], row[stime], apps_work)
+            g_e, g_d = get_apps_between_with_duration(df_disp, 'energy', 'sum', row[ltime], row[stime], apps_game)
+            s_e, s_d = get_apps_between_with_duration(df_disp, 'energy', 'sum', row[ltime], row[stime], apps_social)
             item = {
                 # GENERAL
                 'hour': curr.hour,
@@ -88,6 +98,12 @@ def build_series(enSN, dt=pd.Timedelta(seconds=10)):
                 # DURING LAST SESSION
                 'D duration': (row[stime] - row[ltime]).total_seconds(),
                 'D battery used': get_between(df_battery, 'screen_on_gas_gauge', 'sum', row[ltime], row[stime]),
+                'D work duration': w_d,
+                'D work energy': w_e,
+                'D game duration': g_d,
+                'D game energy': g_e,
+                'D social duration': s_d,
+                'D social energy': s_e,
                 # 'D audio energy': get_between(df_audio, 'screen_on_energy', 'sum', row[ltime], row[stime]),
                 # 'D display energy': get_between(df_disp, 'energy', 'sum', row[ltime], row[stime]),
                 # 'D tp energy': get_between(df_tp, 'energy', 'sum', row[ltime], row[stime]),
@@ -120,6 +136,7 @@ def build_series(enSN, dt=pd.Timedelta(seconds=10)):
                 'C mode 3': mode[2],
                 'C mode 4': mode[3],
                 'C charge': get_point(df_power_saving, 'charge', curr),
+                'C # bright sessions': get_bright_session_num(df_sess, curr),
                 
                 # LABEL
                 'time before bright': (row[etime] - curr).total_seconds()
