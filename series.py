@@ -80,6 +80,8 @@ def build_series(enSN, dt=pd.Timedelta(seconds=10)):
     apps_work = load_app_class(enSN, '工作')
     apps_game = load_app_class(enSN, '游戏')
     apps_social = load_app_class(enSN, '社交')
+    apps_video = load_app_class(enSN, '视频')
+    apps_call = load_app_class(enSN, '通话')
     for i, row in df_sess.iterrows():
         series_dict[i] = pd.DataFrame()
         curr = row[stime]
@@ -88,6 +90,8 @@ def build_series(enSN, dt=pd.Timedelta(seconds=10)):
             w_e, w_d = get_apps_between_with_duration(df_disp, 'energy', 'sum', row[ltime], row[stime], apps_work)
             g_e, g_d = get_apps_between_with_duration(df_disp, 'energy', 'sum', row[ltime], row[stime], apps_game)
             s_e, s_d = get_apps_between_with_duration(df_disp, 'energy', 'sum', row[ltime], row[stime], apps_social)
+            v_e, v_d = get_apps_between_with_duration(df_disp, 'energy', 'sum', row[ltime], row[stime], apps_video)           
+            c_e, c_d = get_apps_between_with_duration(df_disp, 'energy', 'sum', row[ltime], row[stime], apps_call)
             item = {
                 # GENERAL
                 'hour': curr.hour,
@@ -104,6 +108,10 @@ def build_series(enSN, dt=pd.Timedelta(seconds=10)):
                 'D game energy': g_e,
                 'D social duration': s_d,
                 'D social energy': s_e,
+                'D video duration': v_d,
+                'D video energy': v_e,
+                'D call duration': c_d,
+                'D call energy': c_e,
                 # 'D audio energy': get_between(df_audio, 'screen_on_energy', 'sum', row[ltime], row[stime]),
                 # 'D display energy': get_between(df_disp, 'energy', 'sum', row[ltime], row[stime]),
                 # 'D tp energy': get_between(df_tp, 'energy', 'sum', row[ltime], row[stime]),
@@ -146,5 +154,6 @@ def build_series(enSN, dt=pd.Timedelta(seconds=10)):
     return series_dict
 
 if __name__ == '__main__':
-    result = build_series('ELS000040')
-    np.save('x_dict.npy', result)
+    for enSN in ['ELS000040', 'ELS000043', 'ELS000063']:
+        result = build_series(enSN)
+        np.save('x_dict_%s.npy' % enSN, result)

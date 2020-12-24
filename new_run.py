@@ -7,10 +7,11 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset
 from new_model import GruPredictor
 
-NUM_EPOCHS = 300
+torch.manual_seed(0)
+NUM_EPOCHS = 300 # 600
 BATCH_SIZE = 128
 HIDDEN_SIZE = 64
-LR = 1e-2
+LR = 1e-2 # 5e-2
 
 class MyDataset(Dataset):
     def __init__(self, x, y):
@@ -23,38 +24,42 @@ class MyDataset(Dataset):
     def __getitem__(self, idx):
         return self.x[idx], self.y[idx]
 
-def dataloader(x_dict):
+def dataloader(x_dict, length=10):
     x, y = [], []
     for i in range(len(x_dict)):
         dic = x_dict[i]
         y_all = dic['time before bright'].values.tolist()
         dic1 = dic.drop(columns='time before bright')
         x_all = dic1.values.tolist()
-        for j in range(len(dic) - 5):
-            x.append(x_all[j:(j+5)])
-            y.append(y_all[j+4])
+        for j in range(len(dic) - length):
+            x.append(x_all[j:(j+length)])
+            y.append(y_all[j+length-1])
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.3, random_state=42)
     x_train, y_train = torch.tensor(x_train), torch.tensor(y_train)
     x_test, y_test = torch.tensor(x_test), torch.tensor(y_test)
     
+    contin_range = [0] + list(range(6, 24)) # 5:13
+    h_idx = 24 # 13
+    m_idx = 25 # 14
+    s_idx = 26 # 15
     # normalize x_train
     s1 = x_train.shape
     x_train = x_train.reshape(-1, x_train.shape[-1])
-    ma, _ = x_train[:, 5:13].max(dim=0)
-    mi, _ = x_train[:, 5:13].min(dim=0)
-    x_train[:, 5:13] = (x_train[:, 5:13] - mi) / (ma - mi + 1e-8)
-    x_train[:, 13] /= 24 # hour
-    x_train[:, 14] /= 60 # minute
-    x_train[:, 15] /= 60 # second
+    ma, _ = x_train[:, contin_range].max(dim=0)
+    mi, _ = x_train[:, contin_range].min(dim=0)
+    x_train[:, contin_range] = (x_train[:, contin_range] - mi) / (ma - mi + 1e-8)
+    x_train[:, h_idx] /= 24 # hour
+    x_train[:, m_idx] /= 60 # minute
+    x_train[:, s_idx] /= 60 # second
     x_train = x_train.reshape(s1)
     
     # normalize x_test
     s2 = x_test.shape
     x_test = x_test.reshape(-1, x_test.shape[-1])
-    x_test[:, 5:13] = (x_test[:, 5:13] - mi) / (ma - mi + 1e-8)
-    x_test[:, 13] /= 24 # hour
-    x_test[:, 14] /= 60 # minute
-    x_test[:, 15] /= 60 # second
+    x_test[:, contin_range] = (x_test[:, contin_range] - mi) / (ma - mi + 1e-8)
+    x_test[:, h_idx] /= 24 # hour
+    x_test[:, m_idx] /= 60 # minute
+    x_test[:, s_idx] /= 60 # second
     x_test = x_test.reshape(s2)
     
     # normalize y
@@ -67,7 +72,7 @@ def dataloader(x_dict):
     loader_test = DataLoader(test_set, batch_size=test_set.__len__())
     return loader_train, loader_test
 
-x_dict = np.load('x_dict_new.npy', allow_pickle=True).item()
+x_dict = np.load('x_dict_ELS000040.npy', allow_pickle=True).item()
 loader_train, loader_test = dataloader(x_dict)
 
 # import xgboost as xgb
@@ -79,7 +84,7 @@ loader_train, loader_test = dataloader(x_dict)
 input_size = len(x_dict[0].columns) - 1
 model = GruPredictor(input_size, HIDDEN_SIZE)
 optimizer = Adam(model.parameters(), lr=LR)
-scheduler = lr_scheduler.StepLR(optimizer, 150, gamma=0.5)
+scheduler = lr_scheduler.StepLR(optimizer, 200, gamma=0.4)
 #scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[30, 150], gamma=0.1)
 criterion = nn.MSELoss()
 
