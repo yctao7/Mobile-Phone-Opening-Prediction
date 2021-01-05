@@ -1,17 +1,19 @@
 import pandas as pd
 import numpy as np
+import datetime
 import os
+from tqdm import tqdm
 from features import get_between, get_point, get_mode, get_bright_session_num, get_apps_between_with_duration, get_app_num
 
 stime, etime = 'formatted_start_time', 'formatted_end_time'
 ltime = 'last_bright_start_time'
 
 def load_user_brit(enSN):
-    df = pd.read_csv('./data/db_brightness_detail.csv')
+    df = pd.read_csv('./data_10d/db_brightness_detail.csv')
     return df[df['enSN'] == enSN].sort_values(by=[stime]).reset_index(drop=True).copy()
 
 def load(filename, enSN):
-    df = pd.read_csv(os.path.join('./data', filename))
+    df = pd.read_csv(os.path.join('./data_10d', filename))
     return df[df['enSN'] == enSN].reset_index(drop=True).copy()
 
 def load_app_class(enSN, typ):
@@ -61,6 +63,7 @@ def build_dark_session(enSN):
 
 def build_series(enSN, dt=pd.Timedelta(seconds=10)):
     df_sess = build_dark_session(enSN)
+    df_sess = df_sess[df_sess[etime] < datetime.datetime(2020, 11, 9)]
     df_wifi = load('db_app_wifi_data_detail.csv', enSN)
     df_cell = load('db_app_modem_data_detail.csv', enSN)
     # df_audio = load('db_app_audio_detail.csv', enSN)
@@ -82,26 +85,39 @@ def build_series(enSN, dt=pd.Timedelta(seconds=10)):
     apps_social = load_app_class(enSN, '社交')
     apps_video = load_app_class(enSN, '视频')
     apps_call = load_app_class(enSN, '通话')
-    for i, row in df_sess.iterrows():
+    for i, row in tqdm(df_sess.iterrows(), total=df_sess.shape[0]):
         series_dict[i] = pd.DataFrame()
         curr = row[stime]
+        
+        D_duration = (row[stime] - row[ltime]).total_seconds()
+        D_battery_used = get_between(df_battery, 'screen_on_gas_gauge', 'sum', row[ltime], row[stime])
+        w_e, w_d = get_apps_between_with_duration(df_disp, 'energy', 'sum', row[ltime], row[stime], apps_work)
+        g_e, g_d = get_apps_between_with_duration(df_disp, 'energy', 'sum', row[ltime], row[stime], apps_game)
+        s_e, s_d = get_apps_between_with_duration(df_disp, 'energy', 'sum', row[ltime], row[stime], apps_social)
+        v_e, v_d = get_apps_between_with_duration(df_disp, 'energy', 'sum', row[ltime], row[stime], apps_video)           
+        c_e, c_d = get_apps_between_with_duration(df_disp, 'energy', 'sum', row[ltime], row[stime], apps_call)
+        
+        S_battery_used = 0
+        S_wifi_upload = 0
+        S_wifi_download = 0
+        S_cell_upload = 0
+        S_cell_download = 0
+        
+        count = 0
         while curr <= row[etime]:
+            count += 1
+            print(count)
             mode = get_mode(df_power_saving, 'mode', curr)
-            w_e, w_d = get_apps_between_with_duration(df_disp, 'energy', 'sum', row[ltime], row[stime], apps_work)
-            g_e, g_d = get_apps_between_with_duration(df_disp, 'energy', 'sum', row[ltime], row[stime], apps_game)
-            s_e, s_d = get_apps_between_with_duration(df_disp, 'energy', 'sum', row[ltime], row[stime], apps_social)
-            v_e, v_d = get_apps_between_with_duration(df_disp, 'energy', 'sum', row[ltime], row[stime], apps_video)           
-            c_e, c_d = get_apps_between_with_duration(df_disp, 'energy', 'sum', row[ltime], row[stime], apps_call)
             item = {
                 # GENERAL
                 'hour': curr.hour,
                 'minute': curr.minute,
                 'second': curr.second,
-                # 'day of week': curr.dayofweek,
+                'day of week': curr.dayofweek,
                 
                 # DURING LAST SESSION
-                'D duration': (row[stime] - row[ltime]).total_seconds(),
-                'D battery used': get_between(df_battery, 'screen_on_gas_gauge', 'sum', row[ltime], row[stime]),
+                'D duration': D_duration,
+                'D battery used': D_battery_used,
                 'D work duration': w_d,
                 'D work energy': w_e,
                 'D game duration': g_d,
@@ -124,11 +140,11 @@ def build_series(enSN, dt=pd.Timedelta(seconds=10)):
                 
                 # SINCE LAST SESSION 
                 'S time': (curr - row[stime]).total_seconds(),
-                'S battery used': get_between(df_battery, 'screen_off_gas_gauge', 'sum', row[stime], curr),
-                'S wifi data upload': get_between(df_wifi, 'screen_off_tx_bytes', 'sum', row[stime], curr),
-                'S wifi data download': get_between(df_wifi, 'screen_off_rx_bytes', 'sum', row[stime], curr),
-                'S cellular data upload': get_between(df_cell, 'screen_off_tx_bytes', 'sum', row[stime], curr),
-                'S cellular data download': get_between(df_cell, 'screen_off_rx_bytes', 'sum', row[stime], curr),
+                'S battery used': S_battery_used,
+                'S wifi data upload': S_wifi_upload,
+                'S wifi data download': S_wifi_download,
+                'S cellular data upload': S_cell_upload,
+                'S cellular data download': S_cell_download,
                 # 'S bt energy': get_between(df_bt, 'screen_off_energy', 'sum', row[stime], curr),
                 # 'S audio energy': get_between(df_audio, 'screen_off_energy', 'sum', row[stime], curr),
                 # 'S gnss energy': get_between(df_gnss, 'screen_off_energy', 'sum', row[stime], curr),
@@ -152,10 +168,15 @@ def build_series(enSN, dt=pd.Timedelta(seconds=10)):
                     }
             series_dict[i] = series_dict[i].append(item, ignore_index=True)
             curr += dt
+            S_battery_used += get_between(df_battery, 'screen_off_gas_gauge', 'sum', curr - dt, curr)
+            S_wifi_upload += get_between(df_wifi, 'screen_off_tx_bytes', 'sum', curr - dt, curr)
+            S_wifi_download += get_between(df_wifi, 'screen_off_rx_bytes', 'sum', curr - dt, curr)
+            S_cell_upload += get_between(df_cell, 'screen_off_tx_bytes', 'sum', curr - dt, curr)
+            S_cell_download += get_between(df_cell, 'screen_off_rx_bytes', 'sum', curr - dt, curr)
     return series_dict
 
 if __name__ == '__main__':
-    #for enSN in ['ELS000040']:
-    for enSN in ['ELS000040', 'ELS000043', 'ELS000063']:
+    for enSN in ['NOH000041']:
+    #for enSN in ['ELS000040', 'ELS000043', 'ELS000063']:
         result = build_series(enSN)
-        np.save('x_dict_%s.npy' % enSN, result)
+        np.save('x_dict_10d_%s.npy' % enSN, result)

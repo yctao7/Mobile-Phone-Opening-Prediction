@@ -38,16 +38,19 @@ def dataloader(x_dict, length=10):
     x_train, y_train = torch.tensor(x_train), torch.tensor(y_train)
     x_test, y_test = torch.tensor(x_test), torch.tensor(y_test)
     
-    contin_range = [0, 1] + list(range(7, 25)) # 5:13
-    h_idx = 25 # 13
-    m_idx = 26 # 14
-    s_idx = 27 # 15
+    contin_range = [0, 1] + list(range(7, 25))
+    dow_idx = 25
+    h_idx = 26
+    m_idx = 27
+    s_idx = 28
+    
     # normalize x_train
     s1 = x_train.shape
     x_train = x_train.reshape(-1, x_train.shape[-1])
     ma, _ = x_train[:, contin_range].max(dim=0)
     mi, _ = x_train[:, contin_range].min(dim=0)
     x_train[:, contin_range] = (x_train[:, contin_range] - mi) / (ma - mi + 1e-8)
+    x_train[:, dow_idx] /= 7 # day of week
     x_train[:, h_idx] /= 24 # hour
     x_train[:, m_idx] /= 60 # minute
     x_train[:, s_idx] /= 60 # second
@@ -57,6 +60,7 @@ def dataloader(x_dict, length=10):
     s2 = x_test.shape
     x_test = x_test.reshape(-1, x_test.shape[-1])
     x_test[:, contin_range] = (x_test[:, contin_range] - mi) / (ma - mi + 1e-8)
+    x_test[:, dow_idx] /= 7 # day of week
     x_test[:, h_idx] /= 24 # hour
     x_test[:, m_idx] /= 60 # minute
     x_test[:, s_idx] /= 60 # second
@@ -72,7 +76,7 @@ def dataloader(x_dict, length=10):
     loader_test = DataLoader(test_set, batch_size=test_set.__len__())
     return loader_train, loader_test
 
-x_dict = np.load('x_dict_ELS000063.npy', allow_pickle=True).item()
+x_dict = np.load('x_dict_10d_NOH000041.npy', allow_pickle=True).item()
 loader_train, loader_test = dataloader(x_dict)
 
 # import xgboost as xgb

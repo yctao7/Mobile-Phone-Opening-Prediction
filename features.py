@@ -14,23 +14,22 @@ def get_between_with_duration(df0, target, merge_way, s, e, duration=None):
     if duration is None:
         duration = 'manual_duration'
         df[duration] = (df[etime] - df[stime]).apply(lambda x: x.total_seconds())
-    df = df[['productName', 'productVersion', 'timestamps', stime, etime, 'enSN', target, duration]]
+    df = df[['timestamps', stime, etime, 'enSN', target, duration]]
     df_avg = pd.DataFrame(columns=df.columns)
     df1 = df[(df[etime] >= s) & (df[stime] < e)].reset_index(drop=True).copy()
     if len(df1) == 0:
-        df1 = pd.DataFrame({'productName': df0['productName'].iat[0], 'productVersion': df0['productVersion'].iat[0],
-                            'timestamps': df0['timestamps'].iat[0], 'enSN': df0['enSN'].iat[0],
+        df1 = pd.DataFrame({'timestamps': df0['timestamps'].iat[0], 'enSN': df0['enSN'].iat[0],
                             target: 0.0, duration: 0.0}, index=[0])
     else:
         ratios = df1.apply(lambda r: get_ratio(r[stime], r[etime], s, e), axis=1)
         df1[duration] *= ratios
         if merge_way == 'mean':
             df1[target] = df1[target] * df1[duration]
-            df1 = df1.groupby(['productName', 'productVersion', 'timestamps', 'enSN'])[target, duration].sum().reset_index()
+            df1 = df1.groupby(['timestamps', 'enSN'])[target, duration].sum().reset_index()
             df1[target] = df1[target] / df1[duration]
         if merge_way == 'sum':
             df1[target] *= ratios
-            df1 = df1.groupby(['productName', 'productVersion', 'timestamps', 'enSN'])[target, duration].sum().reset_index()
+            df1 = df1.groupby(['timestamps', 'enSN'])[target, duration].sum().reset_index()
     df1[stime], df1[etime]= s, e
     df_avg = df_avg.append(df1, ignore_index=True)
     df_avg[target] = pd.to_numeric(df_avg[target])
@@ -57,8 +56,10 @@ def get_point(df0, target, t, default_value=0):
         return df1[target].iat[0]
 
 
-def get_mode(df, target, t, default_value=0):
+def get_mode(df, target, t, default_value=1):
     d = {1: [1, 0, 0, 0], 2: [0, 1, 0, 0], 4: [0, 0, 1, 0], 5: [0, 0, 0, 1]}
+    if int(get_point(df, target, t, default_value)) == 0:
+        print(target, t)
     return d[int(get_point(df, target, t, default_value))]
 
 
@@ -67,13 +68,22 @@ def get_bright_session_num(df, t, duration=10):
     return len(df[(df['last_bright_start_time'] <= t) & (df['last_bright_start_time'] >= t_before)])
 
 
+def get_app_num(df_disp, t, duration=10):
+    df_disp = df_disp.copy()
+    t_before = t - timedelta(minutes=duration)
+    df_disp[stime] = pd.to_datetime(df_disp[stime])
+    df_disp[etime] = pd.to_datetime(df_disp[etime])
+    df = df_disp[(df_disp[etime] >= t_before) & (df_disp[stime] <= t)]
+    return len(df['name'].unique())
+
+
 def get_apps_between_with_duration(df, target, merge_way, s, e, apps, duration=None):
     if len(apps) == 0:
         return 0, 0
     df0 = df[df['name'].isin(apps)].copy()
     return get_between_with_duration(df0, target, merge_way, s, e, duration)
     
-    
+
 if __name__ == '__main__':
     # df = pd.read_csv('./data/db_brightness_detail.csv')
     # df_user = df[df['enSN'] == 'ELS000040'].reset_index(drop=True)
